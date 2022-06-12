@@ -23,7 +23,15 @@ typedef enum
    
    NOT,
    NEGATE,
-   AS_CHAR
+   AS_CHAR,
+   
+   MODULO,
+   SHL,
+   SHR,
+   
+   TEE,
+   SET,
+   GET
    } Opcode;
 
 typedef struct
@@ -36,13 +44,17 @@ typedef struct
    int instructions[INSTRUCTION_SIZE];
    size_t instrTop;
    
+   #define MEMORY_SIZE 64
+   int memory[MEMORY_SIZE];
+   
    } VirtualMachine;
    
 typedef enum
    {
    NEED_TWO_ARGS = 1,
    ILLEGAL_OP_CODE,
-   NEED_ONE_ARG
+   NEED_ONE_ARG,
+   MEMORY_OUT_OF_BOUNDS
    } VirtualMachineError;
    
 char* VirtualMachineErrorMsg[] = {
@@ -95,6 +107,69 @@ void VirtualMachine_ ## name (VirtualMachine *vm) \
       VirtualMachine_exit(vm, NEED_TWO_ARGS); \
       } \
    }
+void VirtualMachine_set(VirtualMachine *vm)
+   {
+   if(vm->stackTop >= 2)
+      {   
+      int location = vm->stack[vm->stackTop - 2];
+      int value = vm->stack[vm->stackTop - 1];
+      
+      if(location > MEMORY_SIZE || location < 0)
+         {
+         VirtualMachine_exit(vm, MEMORY_OUT_OF_BOUNDS);
+         }
+      vm->memory[location] = value;
+      vm->stack[vm->stackTop - 1] = 0;
+      vm->stack[vm->stackTop - 2] = 0;
+      
+      vm->stackTop -= 2;
+      }
+   else
+      {
+      VirtualMachine_exit(vm, NEED_TWO_ARGS);
+      }
+   }
+   
+void VirtualMachine_get(VirtualMachine *vm)
+   {
+   if(vm->stackTop >= 1)
+      {   
+      int location = vm->stack[vm->stackTop - 1];
+      
+      if(location > MEMORY_SIZE || location < 0)
+         {
+         VirtualMachine_exit(vm, MEMORY_OUT_OF_BOUNDS);
+         }
+      vm->stack[vm->stackTop - 1] = vm->memory[location];
+      }
+   else
+      {
+      VirtualMachine_exit(vm, NEED_ONE_ARG);
+      }
+   }
+   
+void VirtualMachine_tee(VirtualMachine *vm)
+   {
+   if(vm->stackTop >= 2)
+      {   
+      int location = vm->stack[vm->stackTop - 2];
+      int value = vm->stack[vm->stackTop - 1];
+      
+      if(location > MEMORY_SIZE || location < 0)
+         {
+         VirtualMachine_exit(vm, MEMORY_OUT_OF_BOUNDS);
+         }
+      vm->memory[location] = value;
+      vm->stack[vm->stackTop - 2] = 0;
+      vm->stack[vm->stackTop - 1] = vm->memory[location];
+      
+      vm->stackTop--;
+      }
+   else
+      {
+      VirtualMachine_exit(vm, NEED_TWO_ARGS);
+      }
+   }
    
 VirtualMachine_opcode2(sub, -)
 VirtualMachine_opcode2(mul, *)
@@ -110,6 +185,10 @@ VirtualMachine_opcode2(lte, <=)
 VirtualMachine_opcode2(and, &)
 VirtualMachine_opcode2(or, |)
 VirtualMachine_opcode2(xor, ^)
+
+VirtualMachine_opcode2(mod, %)
+VirtualMachine_opcode2(shl, <<)
+VirtualMachine_opcode2(shr, >>)
    
 void VirtualMachine_not(VirtualMachine *vm)
    {
@@ -195,6 +274,14 @@ void VirtualMachine_execute(VirtualMachine *vm)
             instruction(NOT, not);
             instruction(NEGATE, negate);
             instruction(AS_CHAR, asChar);
+            
+            instruction(MODULO, mod);
+            instruction(SHL, shl);
+            instruction(SHR, shr);
+            
+            instruction(TEE, tee);
+            instruction(GET, get);
+            instruction(SET, set);
          
             case 0:
             return; 
